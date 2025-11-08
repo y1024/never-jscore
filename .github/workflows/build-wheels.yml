@@ -88,6 +88,9 @@ jobs:
               echo "=== Installing build dependencies in manylinux container ==="
               yum install -y clang llvm-devel cmake glibc-devel glibc-headers kernel-headers gcc-c++ python3 git curl unzip
 
+              # 保存当前工作目录
+              ORIGINAL_DIR=$(pwd)
+
               # 安装 ninja
               cd /tmp
               curl -L https://github.com/ninja-build/ninja/releases/download/v1.11.1/ninja-linux.zip -o ninja.zip
@@ -101,7 +104,8 @@ jobs:
               mv gn /usr/local/bin/
               chmod +x /usr/local/bin/gn
 
-              cd /
+              # 返回原工作目录
+              cd "$ORIGINAL_DIR"
 
               echo "=== Tool versions ==="
               gn --version
