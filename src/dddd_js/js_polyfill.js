@@ -385,7 +385,15 @@ globalThis.__NEVER_JSCORE_EXTENSIONS_LOADED__ = true;
  * 2. 错误会中断 JS 执行并传播到 Rust 侧
  * 3. Rust 侧捕获错误并提取返回值
  */
+// 全局存储 early return 的值（用于绕过 try-catch）
+globalThis.__neverjscore_early_return_value__ = null;
+globalThis.__neverjscore_early_return_triggered__ = false;
+
 globalThis.__neverjscore_return__ = function(value) {
+    // 存储值到全局变量（用于绕过 Akamai try-catch）
+    globalThis.__neverjscore_early_return_value__ = value;
+    globalThis.__neverjscore_early_return_triggered__ = true;
+
     // 调用 Rust op, 存储值并标记早期返回
     try {
         const json = JSON.stringify(value);

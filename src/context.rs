@@ -250,6 +250,16 @@ impl Context {
                     return Err(anyhow!("Event loop error: {:?}", e));
                 }
 
+                // 检查是否设置了 early return 标志（即使 event loop 正常完成）
+                // 这处理了 eval() 内部调用 __neverjscore_return__ 的情况
+                if self.result_storage.is_early_return() {
+                    let result = self.result_storage.take()
+                        .ok_or_else(|| anyhow!("Early return but no result stored"))?;
+                    let mut count = self.exec_count.borrow_mut();
+                    *count += 1;
+                    return Ok(result);
+                }
+
                 // 正常完成：从 result_storage 获取结果
                 let result = self
                     .result_storage

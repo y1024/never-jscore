@@ -20,17 +20,13 @@ pub fn op_store_result(state: &mut OpState, #[string] value: String) {
 /// 这在逆向工程中非常有用，例如Hook XMLHttpRequest.send拦截参数。
 ///
 /// 实现方式：存储值到 ResultStorage 并标记为早期返回，
-/// 然后抛出 JS Error 来中断执行
-#[op2]
-#[string]
-pub fn op_early_return(state: &mut OpState, #[string] value: String) -> String {
+/// JavaScript 端需要抛出错误来中断执行
+#[op2(fast)]
+pub fn op_early_return(state: &mut OpState, #[string] value: String) {
     if let Some(storage) = state.try_borrow_mut::<Rc<ResultStorage>>() {
         storage.store(value.clone());
         storage.mark_early_return();
     }
-    // 抛出 JS Error 来中断执行
-    // 使用 #[string] 返回值，然后在 JS 端转为 throw
-    value
 }
 
 // 扩展
