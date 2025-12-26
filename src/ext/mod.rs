@@ -14,6 +14,10 @@ pub mod random;
 pub mod xhr;
 pub mod protection;
 
+// Canvas 2D extension
+#[cfg(feature = "canvas")]
+pub mod canvas;
+
 // Runtime stub for deno_node compatibility
 #[cfg(feature = "node_compat")]
 pub mod runtime_stub;
@@ -232,6 +236,12 @@ pub(crate) fn all_extensions(options: ExtensionOptions, is_snapshot: bool) -> Ve
 
     // Random extension for seedable Math.random()
     extensions.extend(random::extensions(&options, is_snapshot));
+
+    // Canvas 2D extension (if enabled)
+    #[cfg(feature = "canvas")]
+    {
+        extensions.extend(canvas::extensions());
+    }
 
     #[cfg(feature = "deno_web_api")]
     {

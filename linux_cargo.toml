@@ -1,11 +1,11 @@
 [package]
 name = "never_jscore"
-version = "2.5.0"
+version = "2.5.2"
 edition = "2021"
 authors = ["never_jscore contributors"]
 description = "High-performance Python JavaScript execution engine based on Deno Core (V8) with full Promise/async support"
 license = "MIT"
-repository = "https://github.com/yourusername/never-jscore"
+repository = "https://github.com/neverl805/never-jscore"
 keywords = ["javascript", "v8", "deno", "execjs", "python"]
 categories = ["development-tools"]
 
@@ -14,7 +14,7 @@ name = "never_jscore"
 crate-type = ["cdylib", "rlib"]
 
 [features]
-default = ["deno_web_api", "node_compat"]
+default = ["deno_web_api", "node_compat","canvas"]
 # 使用 Deno 官方 Web API
 deno_web_api = [
     "deno_webidl",
@@ -42,14 +42,24 @@ node_compat = [
     "dep:deno_maybe_sync",
     "dep:deno_crypto_provider",
     "dep:deno_path_util",
+    "dep:deno_semver",
     "dep:url",
     "dep:thiserror",
     "dep:boxed_error",
     "dep:deno_ast",
 ]
+# Canvas 2D 绘图支持（使用纯 Rust 实现）
+canvas = [
+    "dep:tiny-skia",
+    "dep:csscolorparser",
+    "dep:fontdb",
+    "dep:png",
+    "dep:image",
+    "dep:resvg",
+]
 
 [dependencies]
-deno_core = "0.371.0"
+deno_core = "0.376.0"
 
 
 deno_webidl = { path = "/home/deno/ext/webidl", optional = true }
@@ -61,7 +71,7 @@ deno_tls = { path = "/home/deno/ext/tls", optional = true }
 deno_webstorage = { path = "/home/deno/ext/webstorage", optional = true }
 deno_permissions = { path = "/home/deno/runtime/permissions", optional = true }
 deno_features = { path = "/home/deno/runtime/features", optional = true }
-deno_error = { version = "0.7.0", optional = true }
+deno_error = { version = "0.7.1", optional = true }
 sys_traits = { version = "0.1.17", features = ["libc", "real", "winapi"], optional = true }
 
 # Node.js 兼容层依赖（按 deno 为准）
@@ -80,7 +90,7 @@ pyo3 = { version = "0.27.1", features = ["extension-module", "abi3-py38"] }
 
 # Core utilities
 anyhow = "1.0.100"
-tokio = { version = "1.48", features = ["rt", "time", "macros"] }
+tokio = { version = "1.48", features = ["rt", "time"] }
 serde_json = "1.0"
 
 # Thread-safe utilities
@@ -94,6 +104,7 @@ rustls = { version = "0.23", features = ["ring"], optional = true }
 
 # Node.js 兼容层额外依赖
 deno_path_util = { version = "0.6.4", optional = true }
+deno_semver = { version = "0.9.1", optional = true }
 url = { version = "2.5", optional = true }
 thiserror = { version = "2.0", optional = true }
 boxed_error = { version = "0.2", optional = true }
@@ -111,4 +122,19 @@ windows-sys = { version = "0.59.0", features = [
 
 [patch.crates-io]
 v8 = { path = "/home/rusty_v8" }  # 替换为实际路径，例如 /home/rusty_v8
+
+
+[profile.release]
+opt-level = "z"          # 速度最优
+lto = "fat"            # 编译速度 / 体积 / 性能最平衡
+codegen-units = 1      # 更好优化（稍慢编译）
+panic = "abort"        # 明显减小体积
+strip = "symbols"      # Rust 1.70+，直接 strip
+incremental = false
+
+[profile.dev]
+opt-level = 1          # ✅ 比 0 快很多
+debug = 1              # ✅ 最少调试信息
+incremental = true     # ✅ 增量编译
+
 

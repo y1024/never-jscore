@@ -128,7 +128,7 @@ class Context:
     def eval(
         self,
         code: str,
-        return_value: bool = False,
+        return_value: bool = True,
         auto_await: Optional[bool] = None
     ) -> Any:
         """
