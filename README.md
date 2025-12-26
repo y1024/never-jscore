@@ -1029,18 +1029,19 @@ with Pool(4) as pool:
 
 我们提供了 **10 个全面的测试文件**，展示所有核心功能的使用方法：
 
-| 测试文件 | 功能说明 | 运行命令 |
-|---------|---------|----------|
-| `test_browser_protection.py` | 浏览器环境防检测 | `python tests/test_browser_protection.py` |
-| `test_proxy_logging.py` | Proxy 日志系统 | `python tests/test_proxy_logging.py` |
-| `test_random_seed.py` | 确定性随机数 | `python tests/test_random_seed.py` |
-| `test_terminate_hook.py` | Hook 拦截系统 | `python tests/test_terminate_hook.py` |
-| `test_async_promise.py` | Promise/async/await | `python tests/test_async_promise.py` |
+| 测试文件 | 功能说明                           | 运行命令 |
+|---------|--------------------------------|----------|
+| `test_browser_protection.py` | 浏览器环境防检测                       | `python tests/test_browser_protection.py` |
+| `test_proxy_logging.py` | Proxy 日志系统                     | `python tests/test_proxy_logging.py` |
+| `test_random_seed.py` | 确定性随机数                         | `python tests/test_random_seed.py` |
+| `test_terminate_hook.py` | Hook 拦截系统                      | `python tests/test_terminate_hook.py` |
+| `test_async_promise.py` | Promise/async/await            | `python tests/test_async_promise.py` |
 | `test_web_apis.py` | Web API（fetch, localStorage 等） | `python tests/test_web_apis.py` |
-| `test_context_management.py` | Context 管理和 with 语句 | `python tests/test_context_management.py` |
-| `test_multithreading.py` | 多线程使用 | `python tests/test_multithreading.py` |
-| `test_xmlhttprequest.py` | XMLHttpRequest | `python tests/test_xmlhttprequest.py` |
-| `test_memory_and_performance.py` | 内存监控和性能调优 | `python tests/test_memory_and_performance.py` |
+| `test_context_management.py` | Context 管理和 with 语句            | `python tests/test_context_management.py` |
+| `test_multithreading.py` | 多线程使用                          | `python tests/test_multithreading.py` |
+| `test_xmlhttprequest.py` | XMLHttpRequest                 | `python tests/test_xmlhttprequest.py` |
+| `test_memory_and_performance.py` | 内存监控和性能调优                      | `python tests/test_memory_and_performance.py` |
+| `canvas_complete_example.py` | canvas 2d操作                    | `python tests/canvas_complete_example.py` |
 
 **运行所有测试：**
 ```bash
