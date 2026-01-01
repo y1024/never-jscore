@@ -13,23 +13,25 @@
 ## 一句话介绍
 
 never_jscore 是目前 **最快、功能最完整** 的 Python JavaScript 引擎，提供：
-- 🚀 **比 PyExecJS 快 100-300 倍** 的执行性能
+- 🚀 **极致性能** - 简单任务 255,000+ ops/s，复杂任务 20,000+ ops/s
 - 🎣 **双模式 Hook 拦截**（`$return` + `$terminate`），专为逆向设计
-- ⚡ **v3.0.0 Worker Pool 架构**，批量处理性能再提升 10-100 倍
+- ⚡ **v3.0.0 GIL 释放优化** - 多线程性能显著提升
 - 🌐 **完整 Web/Node.js API**，零配置补环境
 - 🎲 **确定性随机数**，可复现的调试体验
 
 ```python
-# 传统方式：每次都要重新加载 JS（慢）
+# ❌ 错误方式：每次都要重新加载 JS（慢 ~50 ops/s）
 for data in data_list:
     ctx = Context()
     ctx.compile(js_code)
     result = ctx.call("encrypt", [data])
 
-# v3.0.0 新方式：预加载 JS，快 10-100 倍 ⚡
-engine = JSEngine(js_code, workers=4)
+# ✅ 推荐方式：Context 复用，性能极致 (~255,000 ops/s)
+ctx = Context()
+ctx.compile(js_code)
 for data in data_list:
-    result = engine.call("encrypt", [data])  # 无需重新加载
+    result = ctx.call("encrypt", [data])  # 快 5000 倍！
+del ctx
 ```
 
 ---
@@ -76,16 +78,26 @@ print(f"处理完成：{len(results)} 条数据")
 
 never_jscore 提供两种执行模式，适应不同场景：
 
-#### 模式对比
+#### 模式对比 (基于实测数据)
 
-| 特性 | Context（传统模式） | JSEngine（Worker Pool）⭐ v3.0.0 |
+| 特性 | Context（推荐 99% 场景） | JSEngine（Worker Pool）|
 |------|-------------------|-------------------------------|
-| **JS 代码加载** | 每次调用都重新加载 | 预加载一次，workers 复用 |
-| **性能（1000次）** | ~2-5s | **~0.5-1s**（快 5-10 倍） |
-| **多线程安全** | 需要 ThreadLocal | ✅ 内置线程安全队列 |
-| **Hook 数据隔离** | 单一全局存储 | ✅ Worker 级别隔离 |
+| **JS 代码加载** | 复用模式：加载一次，反复调用 | 预加载一次，workers 复用 |
+| **简单任务性能** | **255,969 ops/s** ⭐ | 743 ops/s |
+| **复杂任务性能** | **23,675 ops/s** ⭐ | 550 ops/s |
+| **冷启动性能** | 50 ops/s | **607 ops/s** ⭐ |
+| **多线程安全** | ThreadLocal 模式 | ✅ 内置线程安全队列 |
+| **Hook 数据隔离** | 全局存储 | ✅ Worker 级别隔离 |
 | **GIL 释放** | ✅ v3.0.0 优化 | ✅ 自动释放 |
-| **适用场景** | 探索、调试、一次性脚本 | 批量处理、高并发、生产环境 |
+| **实现复杂度** | ✅ 简单 (3 行代码) | ⚠️ 适中 |
+| **任务调度开销** | **~0.004ms** ⭐ | ~1-2ms (MPSC channel) |
+| **适用场景** | 大多数场景 (99%) | 无法复用 Context 的场景 (1%) |
+
+**性能结论**：Context 复用模式快 **50-340 倍**！
+
+**JSEngine 优势场景**：
+- 每次执行不同的 JS 代码（无法复用 Context）
+- 避免重复加载大型 JS 库（冷启动优化）
 
 #### Context 模式示例
 
@@ -456,54 +468,63 @@ ctx.gc()
 | 复杂算法(1000次) | **11ms** ⭐ | 38ms | 69473ms |
 | Promise/async | **✅ 3ms** | ❌ 不支持 | ❌ 不支持 |
 
-### Context vs JSEngine 性能对比
+### Context vs JSEngine 性能真相 ⚠️
+
+**重要发现**：Context 复用模式在 99% 场景下性能更好！
+
+| 测试场景 | Context (复用) | JSEngine (Pool) | 性能差距 |
+|---------|---------------|----------------|---------|
+| 简单 JS (btoa) | **255,969 ops/s** | 743 ops/s | Context 快 **344x** 🔥 |
+| 复杂计算 (循环) | **23,675 ops/s** | 550 ops/s | Context 快 **43x** 🔥 |
+| 冷启动 (每次重建) | 50 ops/s | **607 ops/s** | JSEngine 快 **12x** ✅ |
 
 ```python
 import time
 import never_jscore
 
-js_code = """
-    function encrypt(data) {
-        return btoa(data);
-    }
-"""
+js_code = "function test() { return btoa('hello'); }"
 
-# 方案 1：Context 重复加载（不推荐）
+# 方案 1：Context 冷启动（不推荐）
 start = time.time()
 for i in range(1000):
     ctx = never_jscore.Context()
     ctx.compile(js_code)
-    result = ctx.call("encrypt", [f"data_{i}"])
+    result = ctx.call("test", [])
     del ctx
 t1 = time.time() - start
 
-# 方案 2：Context 复用（推荐）
+# 方案 2：Context 复用（⭐ 推荐大多数场景）
 start = time.time()
 ctx = never_jscore.Context()
 ctx.compile(js_code)
 for i in range(1000):
-    result = ctx.call("encrypt", [f"data_{i}"])
+    result = ctx.call("test", [])
 del ctx
 t2 = time.time() - start
 
-# 方案 3：JSEngine Worker Pool（v3.0.0，最推荐）
+# 方案 3：JSEngine Worker Pool（⚠️ 仅冷启动场景有优势）
 start = time.time()
 engine = never_jscore.JSEngine(js_code, workers=4)
 for i in range(1000):
-    result = engine.call("encrypt", [f"data_{i}"])
+    result = engine.call("test", [])
 del engine
 t3 = time.time() - start
 
-print(f"Context（重复加载）: {t1:.2f}s")
-print(f"Context（复用）: {t2:.2f}s")
-print(f"JSEngine（Worker Pool）: {t3:.2f}s ⭐")
-print(f"\n性能提升: {t1 / t3:.1f}x")
+print(f"Context（冷启动）: {t1:.2f}s  (~{1000/t1:.0f} ops/s)")
+print(f"Context（复用）:   {t2:.3f}s  (~{1000/t2:.0f} ops/s) ⭐")
+print(f"JSEngine（Pool）:  {t3:.2f}s  (~{1000/t3:.0f} ops/s)")
 ```
 
-**典型结果**（1000 次调用）：
-- Context（重复加载）：~50-100s
-- Context（复用）：~2-5s
-- **JSEngine**：~0.5-1s ⭐（快 100 倍）
+**实测结果**（1000 次调用）：
+- Context（冷启动）：~20s (50 ops/s)
+- Context（复用）：**0.004s (255,969 ops/s)** ⭐
+- JSEngine（Pool）：~1.3s (743 ops/s)
+
+**结论**：Context 复用比 JSEngine 快 **344 倍**！
+
+**原因**：JSEngine 的任务调度开销 (MPSC channel) 约 1-2ms/次，远大于简单 JS 执行时间。
+
+📖 详细分析请参考：[性能优化指南](PERFORMANCE_GUIDE.md)
 
 ---
 
@@ -541,11 +562,26 @@ never_jscore.Context(
 ```python
 never_jscore.JSEngine(
     js_code: str,                    # 预加载的 JavaScript 代码
-    workers: int = 4,                # Worker 数量（推荐 = CPU 核心数）
+    workers: int = 4,                # Worker 数量
     enable_extensions: bool = True,  # 启用 Web API 扩展
     enable_node_compat: bool = False # 启用 Node.js 兼容模式
 )
 ```
+
+**workers 参数配置** ⚠️：
+
+单线程顺序调用时，workers 数量对性能影响很小（差异 < 2%）：
+
+```python
+# 实测：复杂 JS 计算
+engine_1 = JSEngine(js_code, workers=1)  # 702 ops/s
+engine_4 = JSEngine(js_code, workers=4)  # 713 ops/s (几乎相同)
+```
+
+**推荐配置**：
+- 单线程顺序调用 → `workers=1` (或直接用 Context 复用，快 22 倍)
+- 多线程并发 → `workers = CPU 核心数`
+- FastAPI 等异步框架 → `workers = CPU 核心数`
 
 **方法**：
 
@@ -554,15 +590,21 @@ never_jscore.JSEngine(
 | `call(function_name, args)` | 调用预加载的函数 | Any |
 | `execute(code)` | 执行一次性代码 | Any |
 
-**选择建议**：
+**选择建议** (基于实测数据)：
 
-| 场景 | 推荐 |
-|------|------|
-| 一次性脚本、探索调试 | **Context** |
-| 批量处理（1000+ 次） | **JSEngine** |
-| 高并发爬虫 | **JSEngine** |
-| 需要频繁修改代码 | **Context** |
-| 生产环境 API 服务 | **JSEngine** |
+| 场景 | 推荐 | 原因 |
+|------|------|------|
+| 单线程批量处理 | **Context 复用** ⭐ | 快 50-300 倍 |
+| FastAPI / Flask | **Context + ThreadLocal** ⭐ | GIL 释放，性能极佳 |
+| 多线程并发 | **Context + ThreadLocal** ⭐ | 性能最好 |
+| 每次不同 JS 代码 | **JSEngine** | 避免重复加载 |
+| 大型 JS 库 (>1MB) | **JSEngine** | 预加载优势 |
+| 简单 JS (btoa/hash) | **Context 复用** ⭐ | 快 300+ 倍 |
+| 复杂计算 | **Context 复用** ⭐ | 快 40+ 倍 |
+
+**默认建议**: 先用 Context 复用，除非遇到冷启动问题再考虑 JSEngine
+
+📖 详细选择指南：[性能优化指南 - 快速决策表](PERFORMANCE_GUIDE.md#快速决策表)
 
 ### 类型转换
 
@@ -777,15 +819,32 @@ ctx.compile("""
 result = ctx.call("encrypt", ["hello"])  # 会等待 100ms
 ```
 
-### Q: Context vs JSEngine，该用哪个？
+### Q: Context vs JSEngine，该用哪个？⚠️ 重要
+
+**真相**：Context 复用模式在 99% 场景下性能更好（快 50-340 倍）！
 
 **快速判断**：
-- 需要执行 **1-10 次** → Context
-- 需要执行 **100+ 次** → JSEngine
-- 需要 **频繁修改代码** → Context
-- 代码 **固定不变** → JSEngine
-- **探索调试** → Context
-- **生产环境** → JSEngine
+- **默认选择** → Context 复用 ⭐
+- **无法复用** (每次不同 JS 代码) → JSEngine
+- **大型 JS 库** (>1MB) 冷启动 → JSEngine
+- **FastAPI / Flask** → Context + ThreadLocal ⭐
+- **单线程批量** → Context 复用 ⭐
+
+**性能对比** (实测)：
+```python
+# Context 复用：255,969 ops/s ⭐
+ctx = Context()
+ctx.compile(js_code)
+for data in data_list:
+    result = ctx.call("process", [data])
+
+# JSEngine：743 ops/s (慢 344 倍)
+engine = JSEngine(js_code, workers=4)
+for data in data_list:
+    result = engine.call("process", [data])
+```
+
+📖 详细分析：[性能优化指南](PERFORMANCE_GUIDE.md)
 
 ### Q: 如何处理大量数据（避免内存溢出）？
 
@@ -842,19 +901,26 @@ python tests/run_all_tests.py
 
 - 🚀 **Worker Pool 架构 - JSEngine**
   - 预加载 JS 代码到多个 workers，避免重复加载
-  - 性能提升 10-100 倍（相比 Context 重复加载）
+  - **适用场景**：冷启动优化（无法复用 Context 时）
+  - 冷启动性能提升 10-100 倍（相比 Context 重复加载）
   - Worker 级别的 hook 数据隔离，无数据竞争
   - Hook 数据直接返回，消除竞态条件
   - 自动 Worker 池管理和任务调度
 
-- ⚡ **Context GIL 释放优化**
+- ⚡ **Context GIL 释放优化** ⭐ 最重要的性能提升
   - 所有方法（`compile`, `call`, `eval`, `evaluate`）现在都会释放 GIL
   - 使用 `SendPtr` 包装器实现安全的 GIL 释放
+  - **性能飞跃**：Context 复用模式达到 255,000 ops/s（简单任务）
   - 多线程 Python 程序性能显著提升
 
 - 🔧 **Cargo.toml 依赖优化**
   - 移除 7 个不必要的显式依赖
   - 依赖精简 14%，降低编译复杂度
+
+- 📖 **性能真相揭秘**
+  - **Context 复用** 快 50-340 倍（相比 JSEngine）
+  - 新增 [PERFORMANCE_GUIDE.md](PERFORMANCE_GUIDE.md) 详细分析
+  - 更新最佳实践建议：默认使用 Context 复用
 
 ### v2.5.2 (2025-12-26)
 
@@ -877,6 +943,7 @@ python tests/run_all_tests.py
 ### 📚 官方文档
 
 - **快速开始**：本 README
+- **性能优化指南** ⭐：[PERFORMANCE_GUIDE.md](PERFORMANCE_GUIDE.md) - Context vs JSEngine 性能真相
 - **Canvas API 参考**：[docs/CANVAS_API_REFERENCE.md](docs/CANVAS_API_REFERENCE.md)
 - **Node.js API 对比**：[NODEJS_V25_API_COMPARISON.md](NODEJS_V25_API_COMPARISON.md)
 - **多线程支持**：[docs/MULTITHREADING.md](docs/MULTITHREADING.md)
