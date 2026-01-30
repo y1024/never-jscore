@@ -59,26 +59,26 @@ canvas = [
 deno_core = "0.380.1"
 
 # Web API dependencies (deno_web_api feature)
-deno_webidl = { path = "G:/deno/ext/webidl", optional = true }
-deno_web = { path = "G:/deno/ext/web", optional = true }
-deno_crypto = { path = "G:/deno/ext/crypto", optional = true }
-deno_fetch = { path = "G:/deno/ext/fetch", optional = true }
-deno_net = { path = "G:/deno/ext/net", optional = true }
-deno_tls = { path = "G:/deno/ext/tls", optional = true }
-deno_webstorage = { path = "G:/deno/ext/webstorage", optional = true }
-deno_permissions = { path = "G:/deno/runtime/permissions", optional = true }
-deno_features = { path = "G:/deno/runtime/features", optional = true }
+deno_webidl = { path = "G:/myself_rust_p/deno/ext/webidl", optional = true }
+deno_web = { path = "G:/myself_rust_p/deno/ext/web", optional = true }
+deno_crypto = { path = "G:/myself_rust_p/deno/ext/crypto", optional = true }
+deno_fetch = { path = "G:/myself_rust_p/deno/ext/fetch", optional = true }
+deno_net = { path = "G:/myself_rust_p/deno/ext/net", optional = true }
+deno_tls = { path = "G:/myself_rust_p/deno/ext/tls", optional = true }
+deno_webstorage = { path = "G:/myself_rust_p/deno/ext/webstorage", optional = true }
+deno_permissions = { path = "G:/myself_rust_p/deno/runtime/permissions", optional = true }
+deno_features = { path = "G:/myself_rust_p/deno/runtime/features", optional = true }
 deno_error = { version = "0.7.1", optional = true }
 sys_traits = { version = "0.1.17", features = ["libc", "real", "winapi"], optional = true }
 rustls = { version = "0.23", features = ["ring"], optional = true }
 
 # Node.js 兼容层核心依赖 (node_compat feature)
-deno_node = { path = "G:/deno/ext/node", optional = true, default-features = false }
-deno_fs = { path = "G:/deno/ext/fs", optional = true, default-features = false }
-deno_io = { path = "G:/deno/ext/io", optional = true, default-features = false }
-deno_os = { path = "G:/deno/ext/os", optional = true, default-features = false }
-deno_process = { path = "G:/deno/ext/process", optional = true, default-features = false }
-node_resolver = { path = "G:/deno/libs/node_resolver", optional = true, default-features = false }
+deno_node = { path = "G:/myself_rust_p/deno/ext/node", optional = true, default-features = false }
+deno_fs = { path = "G:/myself_rust_p/deno/ext/fs", optional = true, default-features = false }
+deno_io = { path = "G:/myself_rust_p/deno/ext/io", optional = true, default-features = false }
+deno_os = { path = "G:/myself_rust_p/deno/ext/os", optional = true, default-features = false }
+deno_process = { path = "G:/myself_rust_p/deno/ext/process", optional = true, default-features = false }
+node_resolver = { path = "G:/myself_rust_p/deno/libs/node_resolver", optional = true, default-features = false }
 deno_semver = { version = "0.9.1", optional = true }
 deno_ast = { version = "0.50.3", features = ["transpiling"], optional = true }
 
