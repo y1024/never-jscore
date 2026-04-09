@@ -122,9 +122,11 @@ jobs:
           before-script-linux: |
             # 禁用 submodule 递归（避免 cargo git dep 报错）
             git config --global fetch.recurseSubmodules false
-            # 安装额外依赖（manylinux_2_28 自带 gcc/cmake/clang，补充 openssl-devel）
-            dnf install -y openssl-devel perl-IPC-Cmd 2>/dev/null || \
-            yum install -y openssl-devel perl-IPC-Cmd 2>/dev/null || true
+            # clang/libclang: bindgen (libsqlite3-sys, deno_node_sqlite) 必须
+            # openssl-devel: deno_tls/deno_fetch 依赖
+            # perl-IPC-Cmd: ring crate 编译依赖
+            dnf install -y clang openssl-devel perl-IPC-Cmd 2>/dev/null || \
+            yum install -y clang openssl-devel perl-IPC-Cmd 2>/dev/null || true
         env:
           SCCACHE_GHA_ENABLED: "true"
           V8_FROM_SOURCE: '0'
