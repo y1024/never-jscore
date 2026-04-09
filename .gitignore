@@ -1,7 +1,6 @@
 # Rust
 /target
 /examples
-Cargo.lock
 package.json
 package-lock.json
 /node_modules
