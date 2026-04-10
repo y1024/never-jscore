@@ -108,16 +108,12 @@ jobs:
           # maturin-action 将 $GITHUB_WORKSPACE 以相同绝对路径挂入容器
           echo "RUSTY_V8_ARCHIVE=$GITHUB_WORKSPACE/${FILE}" >> $GITHUB_ENV
 
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.4
-
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           manylinux: "2_34"
           args: --release --strip --out dist -i python${{ matrix.python-version }}
-          sccache: 'true'
           before-script-linux: |
             # 禁用 submodule 递归（避免 cargo git dep 报错）
             git config --global fetch.recurseSubmodules false
@@ -136,7 +132,6 @@ jobs:
             echo "ld:  $(ld --version | head -1)"
             echo "clang: $(clang --version | head -1)"
         env:
-          SCCACHE_GHA_ENABLED: "true"
           V8_FROM_SOURCE: '0'
           RUSTY_V8_ARCHIVE: ${{ env.RUSTY_V8_ARCHIVE }}
 
