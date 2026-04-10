@@ -126,11 +126,10 @@ jobs:
             # AlmaLinux 9 自带 GCC 11, 但 gcc-toolset-14 提供更优的编译器
             dnf install -y gcc-toolset-14 clang openssl-devel perl-IPC-Cmd pkg-config cmake
 
-            # 激活 gcc-toolset-14 — 设置 PATH/CC/CXX 让后续编译使用 GCC 14
+            # 激活 gcc-toolset-14 — 容器内用 export，不能用 $GITHUB_ENV
             source /opt/rh/gcc-toolset-14/enable
-            echo "CC=/opt/rh/gcc-toolset-14/root/usr/bin/gcc" >> $GITHUB_ENV
-            echo "CXX=/opt/rh/gcc-toolset-14/root/usr/bin/g++" >> $GITHUB_ENV
-            export PATH="/opt/rh/gcc-toolset-14/root/usr/bin:$PATH"
+            export CC=/opt/rh/gcc-toolset-14/root/usr/bin/gcc
+            export CXX=/opt/rh/gcc-toolset-14/root/usr/bin/g++
 
             echo "=== Build Environment ==="
             echo "GCC: $(gcc --version | head -1)"
