@@ -16,7 +16,7 @@ env:
   GH_ACTIONS: 1
 
 jobs:
-  # ─── macOS ────────────────────────────────────────────────────────────────
+  # macOS
   build_wheels_macos:
     name: Build macOS wheels (${{ matrix.target }})
     runs-on: macos-14
@@ -82,11 +82,10 @@ jobs:
           path: dist/*.whl
           if-no-files-found: error
 
-  # ─── Linux ────────────────────────────────────────────────────────────────
-  # 使用 manylinux_2_28 (AlmaLinux 8, glibc 2.28+)
-  # 覆盖: Debian 10+, Ubuntu 18.10+, RHEL 8+, Fedora 29+
-  # 与仓库 .cargo/config.toml 的链接假设一致:
-  #   使用 AlmaLinux 8 的 system gcc/binutils 处理 V8 预编译库 TLS 重定位
+  # Linux
+  # manylinux_2_28 is a stable modern baseline for PyPI wheels, and it matches
+  # the repository's .cargo/config.toml assumption of using system gcc/binutils
+  # for the prebuilt V8 archive on x86_64-unknown-linux-gnu.
   build_wheels_linux:
     name: Build Linux wheels (${{ matrix.target }})
     runs-on: ubuntu-24.04
@@ -106,7 +105,8 @@ jobs:
           curl -fL "https://github.com/denoland/rusty_v8/releases/download/v147.0.0/${FILE}.gz" \
             -o "${FILE}.gz"
           gzip -d -k "${FILE}.gz"
-          # maturin-action 将 $GITHUB_WORKSPACE 以相同绝对路径挂入容器
+          # maturin-action mounts $GITHUB_WORKSPACE into the manylinux container
+          # at the same absolute path, so this archive path stays valid in-container.
           echo "RUSTY_V8_ARCHIVE=$GITHUB_WORKSPACE/${FILE}" >> $GITHUB_ENV
 
       - name: Build wheels
@@ -116,21 +116,21 @@ jobs:
           manylinux: "2_28"
           args: --release --locked --strip --compatibility pypi --out dist -i python${{ matrix.python-version }}
           before-script-linux: |
-            # 禁用 submodule 递归（避免 cargo git dep 报错）
             git config --global fetch.recurseSubmodules false
 
-            # 安装编译依赖
-            # 依赖 manylinux_2_28 的 system gcc/binutils，不再强制改用 clang/lld
-            # openssl-devel: deno_tls/deno_fetch 依赖
-            # perl-IPC-Cmd: ring crate 编译依赖
-            dnf install -y openssl-devel perl-IPC-Cmd pkg-config cmake
+            # Keep the final link step on gcc/binutils (see .cargo/config.toml).
+            # Install clang-devel only to satisfy bindgen / libsqlite3-sys, which
+            # needs libclang.so at build time.
+            dnf install -y clang-devel openssl-devel perl-IPC-Cmd pkg-config cmake
 
             echo "=== Build Environment ==="
             cat /etc/os-release
             echo "/usr/bin/gcc: $(/usr/bin/gcc --version | head -1)"
             echo "ld: $(ld --version | head -1)"
+            echo "libclang: $(ls -1 /usr/lib64/libclang.so* | head -1)"
         env:
           V8_FROM_SOURCE: '0'
+          LIBCLANG_PATH: /usr/lib64
           RUSTY_V8_ARCHIVE: ${{ env.RUSTY_V8_ARCHIVE }}
 
       - name: Upload wheels
@@ -140,7 +140,7 @@ jobs:
           path: dist/*.whl
           if-no-files-found: error
 
-  # ─── sdist ────────────────────────────────────────────────────────────────
+  # sdist
   build_sdist:
     name: Build source distribution
     runs-on: ubuntu-latest
@@ -165,7 +165,7 @@ jobs:
           path: dist/*.tar.gz
           if-no-files-found: error
 
-  # ─── Release ──────────────────────────────────────────────────────────────
+  # Release
   release:
     name: Release to PyPI
     runs-on: ubuntu-latest
