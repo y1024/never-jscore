@@ -83,9 +83,10 @@ jobs:
           if-no-files-found: error
 
   # Linux
-  # manylinux_2_28 is a stable modern baseline for PyPI wheels, and it matches
-  # the repository's .cargo/config.toml assumption of using system gcc/binutils
-  # for the prebuilt V8 archive on x86_64-unknown-linux-gnu.
+  # manylinux_2_28 is a stable modern baseline for PyPI wheels.
+  # On Linux we build V8 from source because the prebuilt static archive uses
+  # local-exec TLS relocations that cannot be linked into the Python extension
+  # shared object.
   build_wheels_linux:
     name: Build Linux wheels (${{ matrix.target }})
     runs-on: ubuntu-24.04
@@ -98,17 +99,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download V8 prebuilt (simdutf)
-        run: |
-          ARCH=${{ matrix.target }}
-          FILE="librusty_v8_simdutf_release_${ARCH}.a"
-          curl -fL "https://github.com/denoland/rusty_v8/releases/download/v147.0.0/${FILE}.gz" \
-            -o "${FILE}.gz"
-          gzip -d -k "${FILE}.gz"
-          # maturin-action mounts $GITHUB_WORKSPACE into the manylinux container
-          # at the same absolute path, so this archive path stays valid in-container.
-          echo "RUSTY_V8_ARCHIVE=$GITHUB_WORKSPACE/${FILE}" >> $GITHUB_ENV
-
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -118,44 +108,33 @@ jobs:
           before-script-linux: |
             git config --global fetch.recurseSubmodules false
 
-            # manylinux_2_28 ships gcc-toolset-14 by default, but this project's
-            # prebuilt V8 archive needs the older EL8 linker behavior from
-            # system gcc/binutils (gcc 8.x + binutils 2.30).
-            #
-            # clang-devel is still needed for bindgen / libsqlite3-sys.
-            dnf install -y gcc gcc-c++ binutils clang-devel openssl-devel perl-IPC-Cmd pkg-config cmake
+            # Build V8 from source on Linux instead of linking the prebuilt archive.
+            # The prebuilt static archive carries local-exec TLS relocations
+            # (R_X86_64_TPOFF32), which cannot be linked into the Python extension
+            # shared object. We force a PIC + initial-exec TLS model for the V8 GN
+            # compile step through Chromium's cc_wrapper hook.
+            dnf install -y gcc gcc-c++ binutils clang-devel glib2-devel openssl-devel perl-IPC-Cmd pkg-config cmake
 
-            cat > /tmp/gcc8-system-gcc <<'EOF'
+            cat > /tmp/v8-cc-wrapper.sh <<'EOF'
             #!/bin/sh
-            exec /usr/bin/x86_64-redhat-linux-gcc-8 -B/usr/bin "$@"
+            compiler="$1"
+            shift
+            exec "$compiler" -fPIC -ftls-model=initial-exec "$@"
             EOF
-            chmod +x /tmp/gcc8-system-gcc
-
-            cat > /tmp/gpp8-system-g++ <<'EOF'
-            #!/bin/sh
-            exec /usr/bin/x86_64-redhat-linux-g++ -B/usr/bin "$@"
-            EOF
-            chmod +x /tmp/gpp8-system-g++
+            chmod +x /tmp/v8-cc-wrapper.sh
 
             echo "=== Build Environment ==="
             cat /etc/os-release
             echo "/usr/bin/gcc: $(/usr/bin/gcc --version | head -1)"
-            echo "/usr/bin/x86_64-redhat-linux-gcc-8: $(/usr/bin/x86_64-redhat-linux-gcc-8 --version | head -1)"
+            echo "/usr/bin/clang: $(/usr/bin/clang --version | head -1)"
             echo "/usr/bin/ld: $(/usr/bin/ld --version | head -1)"
-            ls -l /usr/bin/gcc /usr/bin/x86_64-redhat-linux-gcc-8 /usr/bin/ld
-            echo "gcc8 default ld: $(/usr/bin/x86_64-redhat-linux-gcc-8 -print-prog-name=ld)"
-            echo "gcc8 wrapper ld: $(/tmp/gcc8-system-gcc -print-prog-name=ld)"
+            ls -l /usr/bin/gcc /usr/bin/clang /usr/bin/ld /tmp/v8-cc-wrapper.sh
             echo "libclang: $(ls -1 /usr/lib64/libclang.so* | head -1)"
         env:
-          V8_FROM_SOURCE: '0'
-          CC: /tmp/gcc8-system-gcc
-          CXX: /tmp/gpp8-system-g++
-          AR: /usr/bin/ar
-          NM: /usr/bin/nm
-          RANLIB: /usr/bin/ranlib
-          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: /tmp/gcc8-system-gcc
+          V8_FROM_SOURCE: '1'
+          EXTRA_GN_ARGS: 'cc_wrapper="/tmp/v8-cc-wrapper.sh"'
           LIBCLANG_PATH: /usr/lib64
-          RUSTY_V8_ARCHIVE: ${{ env.RUSTY_V8_ARCHIVE }}
+          PRINT_GN_ARGS: '1'
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
