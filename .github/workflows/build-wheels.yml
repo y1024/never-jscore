@@ -85,7 +85,8 @@ jobs:
   # ─── Linux ────────────────────────────────────────────────────────────────
   # 使用 manylinux_2_34 (AlmaLinux 9, glibc 2.34+)
   # 覆盖: Ubuntu 21.04+, Debian 11+, RHEL 9+, Fedora 34+
-  # 基础: GCC 11, 通过 gcc-toolset-14 升级至 GCC 14
+  # 使用 lld 链接器: 解决 V8 预编译库 TLS 重定位 (R_X86_64_TPOFF32) 与
+  #   共享库不兼容的问题 — GNU ld 拒绝此重定位，lld 可以正确处理
   build_wheels_linux:
     name: Build Linux wheels (${{ matrix.target }})
     runs-on: ubuntu-latest
@@ -118,22 +119,21 @@ jobs:
             # 禁用 submodule 递归（避免 cargo git dep 报错）
             git config --global fetch.recurseSubmodules false
 
-            # 安装 gcc-toolset-14 (GCC 14, binutils 2.42+) 和编译依赖
-            # AlmaLinux 9 自带 GCC 11, 但 gcc-toolset-14 提供更优的编译器
-            dnf install -y gcc-toolset-14 clang openssl-devel perl-IPC-Cmd pkg-config cmake
-
-            # 激活 gcc-toolset-14 — 容器内用 export，不能用 $GITHUB_ENV
-            source /opt/rh/gcc-toolset-14/enable
-            export CC=/opt/rh/gcc-toolset-14/root/usr/bin/gcc
-            export CXX=/opt/rh/gcc-toolset-14/root/usr/bin/g++
+            # 安装编译依赖
+            # clang/lld: 用 lld 替代 GNU ld 解决 V8 TLS 重定位问题
+            # openssl-devel: deno_tls/deno_fetch 依赖
+            # perl-IPC-Cmd: ring crate 编译依赖
+            dnf install -y clang lld openssl-devel perl-IPC-Cmd pkg-config cmake
 
             echo "=== Build Environment ==="
             echo "GCC: $(gcc --version | head -1)"
-            echo "ld:  $(ld --version | head -1)"
+            echo "lld: $(lld --version | head -1)"
             echo "clang: $(clang --version | head -1)"
         env:
           V8_FROM_SOURCE: '0'
           RUSTY_V8_ARCHIVE: ${{ env.RUSTY_V8_ARCHIVE }}
+          # 使用 lld 链接器 — 它能处理 V8 的 IE TLS 重定位到共享库中
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=lld"
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
