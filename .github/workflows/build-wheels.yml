@@ -84,13 +84,13 @@ jobs:
 
   # ─── Linux ────────────────────────────────────────────────────────────────
   # manylinux_2_28 (AlmaLinux 8, glibc 2.28+)
-  # V8 预编译库使用 local-exec TLS (R_X86_64_TPOFF32)，新版 binutils (2.38+)
-  # 严格禁止将其链入 .so。manylinux 镜像预激活了 gcc-toolset-14 (binutils 2.42)。
-  # 方案: .cargo/config.toml 用 -B/usr/bin/ 强制 gcc 使用系统 ld (binutils ~2.30)
-  #        + -z,notext 允许 TLS 重定位。
+  # V8 预编译库使用 local-exec TLS (R_X86_64_TPOFF32)，所有版本 GNU ld 都拒绝
+  # 将其链入 .so (hidden symbol)。必须从源码编译 V8，使用 initial-exec TLS 模型。
+  # 构建时间约 60 分钟。
   build_wheels_linux:
     name: Build Linux wheels (${{ matrix.target }})
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     strategy:
       matrix:
         python-version: ['3.11']
@@ -99,15 +99,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Download V8 prebuilt (simdutf)
-        run: |
-          ARCH=${{ matrix.target }}
-          FILE="librusty_v8_simdutf_release_${ARCH}.a"
-          curl -fL "https://github.com/denoland/rusty_v8/releases/download/v147.0.0/${FILE}.gz" \
-            -o "${FILE}.gz"
-          gzip -d -k "${FILE}.gz"
-          echo "RUSTY_V8_ARCHIVE=$GITHUB_WORKSPACE/${FILE}" >> $GITHUB_ENV
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
@@ -118,21 +109,22 @@ jobs:
           before-script-linux: |
             git config --global fetch.recurseSubmodules false
 
-            # clang: bindgen (libsqlite3-sys) 需要 libclang
+            # clang: V8 源码编译 + bindgen (libsqlite3-sys) 需要
             # openssl-devel: deno_tls/deno_fetch
             # perl-IPC-Cmd: ring crate
-            dnf install -y clang openssl-devel perl-IPC-Cmd pkg-config cmake
+            dnf install -y clang clang-devel lld openssl-devel perl-IPC-Cmd pkg-config cmake
 
-            # 验证系统 ld 版本 — 需要 binutils ≤2.37 (不严格检查 TPOFF32)
-            # .cargo/config.toml 已配置 -B/usr/bin/ 强制使用此 ld
+            # 从源码编译 V8，使用 initial-exec TLS 模型 (而非 local-exec)
+            # initial-exec 生成 GOTTPOFF 重定位，可链入共享库
+            export V8_FROM_SOURCE=1
+            export EXTRA_GN_ARGS='extra_cflags=["-fPIC","-ftls-model=initial-exec"]'
+            export PRINT_GN_ARGS=1
+
             echo "=== Build Environment ==="
-            echo "system ld: $(/usr/bin/ld --version | head -1)"
-            echo "toolset ld: $(ls /opt/rh/gcc-toolset-*/root/usr/bin/ld 2>/dev/null && /opt/rh/gcc-toolset-*/root/usr/bin/ld --version | head -1 || echo 'not found')"
-            echo "gcc: $(/usr/bin/gcc --version | head -1)"
-        env:
-          V8_FROM_SOURCE: '0'
-          RUSTY_V8_ARCHIVE: ${{ env.RUSTY_V8_ARCHIVE }}
-
+            echo "clang: $(clang --version | head -1)"
+            echo "gcc: $(gcc --version | head -1)"
+            echo "V8_FROM_SOURCE=$V8_FROM_SOURCE"
+            echo "EXTRA_GN_ARGS=$EXTRA_GN_ARGS"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
