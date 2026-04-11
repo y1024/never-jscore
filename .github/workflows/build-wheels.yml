@@ -82,14 +82,13 @@ jobs:
           path: dist/*.whl
           if-no-files-found: error
 
-  # Linux
-  # manylinux_2_28 is a stable modern baseline for PyPI wheels.
-  # On Linux we build V8 from source because the prebuilt static archive uses
-  # local-exec TLS relocations that cannot be linked into the Python extension
-  # shared object.
+  # ─── Linux ────────────────────────────────────────────────────────────────
+  # manylinux_2_28 (AlmaLinux 8, glibc 2.28+)
+  # 使用 lld 链接器: V8 预编译库带有 local-exec TLS 重定位 (R_X86_64_TPOFF32),
+  #   GNU ld 拒绝将其链入共享库, 但 lld 可以正确处理
   build_wheels_linux:
     name: Build Linux wheels (${{ matrix.target }})
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: ['3.11']
@@ -99,42 +98,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Download V8 prebuilt (simdutf)
+        run: |
+          ARCH=${{ matrix.target }}
+          FILE="librusty_v8_simdutf_release_${ARCH}.a"
+          curl -fL "https://github.com/denoland/rusty_v8/releases/download/v147.0.0/${FILE}.gz" \
+            -o "${FILE}.gz"
+          gzip -d -k "${FILE}.gz"
+          echo "RUSTY_V8_ARCHIVE=$GITHUB_WORKSPACE/${FILE}" >> $GITHUB_ENV
+
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           manylinux: "2_28"
-          args: --release --locked --strip --compatibility pypi --out dist -i python${{ matrix.python-version }}
+          args: --release --strip --out dist -i python${{ matrix.python-version }}
           before-script-linux: |
             git config --global fetch.recurseSubmodules false
 
-            # Build V8 from source on Linux instead of linking the prebuilt archive.
-            # The prebuilt static archive carries local-exec TLS relocations
-            # (R_X86_64_TPOFF32), which cannot be linked into the Python extension
-            # shared object. We force a PIC + initial-exec TLS model for the V8 GN
-            # compile step through Chromium's cc_wrapper hook.
-            dnf install -y gcc gcc-c++ binutils clang-devel glib2-devel openssl-devel perl-IPC-Cmd pkg-config cmake
+            # clang + lld: 替代 GNU ld 解决 V8 TLS 重定位问题
+            # openssl-devel: deno_tls/deno_fetch
+            # perl-IPC-Cmd: ring crate
+            dnf install -y clang lld openssl-devel perl-IPC-Cmd pkg-config cmake
 
-            cat > /tmp/v8-cc-wrapper.sh <<'EOF'
-            #!/bin/sh
-            compiler="$1"
-            shift
-            exec "$compiler" -fPIC -ftls-model=initial-exec "$@"
-            EOF
-            chmod +x /tmp/v8-cc-wrapper.sh
+            # 关键: env: 块的变量不传入 Docker 容器, 必须在此 export
+            export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=clang
+            export RUSTFLAGS="-C link-arg=-fuse-ld=lld"
 
             echo "=== Build Environment ==="
-            cat /etc/os-release
-            echo "/usr/bin/gcc: $(/usr/bin/gcc --version | head -1)"
-            echo "/usr/bin/clang: $(/usr/bin/clang --version | head -1)"
-            echo "/usr/bin/ld: $(/usr/bin/ld --version | head -1)"
-            ls -l /usr/bin/gcc /usr/bin/clang /usr/bin/ld /tmp/v8-cc-wrapper.sh
-            echo "libclang: $(ls -1 /usr/lib64/libclang.so* | head -1)"
+            echo "clang: $(clang --version | head -1)"
+            echo "lld: $(lld --version 2>&1 | head -1)"
         env:
-          V8_FROM_SOURCE: '1'
-          EXTRA_GN_ARGS: 'cc_wrapper="/tmp/v8-cc-wrapper.sh"'
-          LIBCLANG_PATH: /usr/lib64
-          PRINT_GN_ARGS: '1'
+          V8_FROM_SOURCE: '0'
+          RUSTY_V8_ARCHIVE: ${{ env.RUSTY_V8_ARCHIVE }}
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
