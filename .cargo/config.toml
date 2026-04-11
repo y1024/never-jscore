@@ -5,15 +5,3 @@ git-fetch-with-cli = true
 rustflags = [
     "-C", "link-arg=/NODEFAULTLIB:libcmt",
 ]
-
-# V8 预编译库使用 local-exec TLS 模型（R_X86_64_TPOFF32 重定位）。
-# 新版 binutils (2.38+) 严格禁止将此重定位链入 .so，但老版 (≤2.30) 允许。
-# manylinux_2_28 镜像预激活了 gcc-toolset-14 (binutils 2.42)，所以必须:
-#   1. 用 -B/usr/bin/ 强制 gcc 使用系统 ld (binutils ~2.30)
-#   2. 用 -z,notext 允许 text/TLS 重定位
-[target.x86_64-unknown-linux-gnu]
-linker = "/usr/bin/gcc"
-rustflags = [
-    "-C", "link-arg=-B/usr/bin/",
-    "-C", "link-arg=-Wl,-z,notext",
-]
