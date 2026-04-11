@@ -84,8 +84,10 @@ jobs:
 
   # ─── Linux ────────────────────────────────────────────────────────────────
   # manylinux_2_28 (AlmaLinux 8, glibc 2.28+)
-  # 使用 lld 链接器: V8 预编译库带有 local-exec TLS 重定位 (R_X86_64_TPOFF32),
-  #   GNU ld 拒绝将其链入共享库, 但 lld 可以正确处理
+  # V8 预编译库使用 local-exec TLS (R_X86_64_TPOFF32)，新版 binutils (2.38+)
+  # 严格禁止将其链入 .so。manylinux 镜像预激活了 gcc-toolset-14 (binutils 2.42)。
+  # 方案: .cargo/config.toml 用 -B/usr/bin/ 强制 gcc 使用系统 ld (binutils ~2.30)
+  #        + -z,notext 允许 TLS 重定位。
   build_wheels_linux:
     name: Build Linux wheels (${{ matrix.target }})
     runs-on: ubuntu-latest
@@ -116,18 +118,17 @@ jobs:
           before-script-linux: |
             git config --global fetch.recurseSubmodules false
 
-            # clang + lld: 替代 GNU ld 解决 V8 TLS 重定位问题
+            # clang: bindgen (libsqlite3-sys) 需要 libclang
             # openssl-devel: deno_tls/deno_fetch
             # perl-IPC-Cmd: ring crate
-            dnf install -y clang lld openssl-devel perl-IPC-Cmd pkg-config cmake
+            dnf install -y clang openssl-devel perl-IPC-Cmd pkg-config cmake
 
-            # 关键: env: 块的变量不传入 Docker 容器, 必须在此 export
-            export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=clang
-            export RUSTFLAGS="-C link-arg=-fuse-ld=lld"
-
+            # 验证系统 ld 版本 — 需要 binutils ≤2.37 (不严格检查 TPOFF32)
+            # .cargo/config.toml 已配置 -B/usr/bin/ 强制使用此 ld
             echo "=== Build Environment ==="
-            echo "clang: $(clang --version | head -1)"
-            echo "lld: $(lld --version 2>&1 | head -1)"
+            echo "system ld: $(/usr/bin/ld --version | head -1)"
+            echo "toolset ld: $(ls /opt/rh/gcc-toolset-*/root/usr/bin/ld 2>/dev/null && /opt/rh/gcc-toolset-*/root/usr/bin/ld --version | head -1 || echo 'not found')"
+            echo "gcc: $(/usr/bin/gcc --version | head -1)"
         env:
           V8_FROM_SOURCE: '0'
           RUSTY_V8_ARCHIVE: ${{ env.RUSTY_V8_ARCHIVE }}

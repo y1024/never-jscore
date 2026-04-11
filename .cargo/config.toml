@@ -6,13 +6,14 @@ rustflags = [
     "-C", "link-arg=/NODEFAULTLIB:libcmt",
 ]
 
-# V8 使用 initial-exec TLS 模型（TPOFF32 重定位），rust-lld 拒绝在 .so 中使用此重定位。
-# 切回 GNU ld (bfd) 并加 -z,notext 允许 text/TLS 重定位，glibc 2.28+ 的 dlopen 可正确处理。
+# V8 预编译库使用 local-exec TLS 模型（R_X86_64_TPOFF32 重定位）。
+# 新版 binutils (2.38+) 严格禁止将此重定位链入 .so，但老版 (≤2.30) 允许。
+# manylinux_2_28 镜像预激活了 gcc-toolset-14 (binutils 2.42)，所以必须:
+#   1. 用 -B/usr/bin/ 强制 gcc 使用系统 ld (binutils ~2.30)
+#   2. 用 -z,notext 允许 text/TLS 重定位
 [target.x86_64-unknown-linux-gnu]
-# 必须用系统 GCC(/usr/bin/gcc, binutils ~2.30)而非 toolset GCC 14(binutils 2.42)
-# binutils 2.38+ 对 hidden symbol + TPOFF32 + -shared 加了绝对限制
-# 系统 GCC 8 的 binutils 2.30 没有此限制，V8 prebuilt 的 TLS initial-exec 可以链接
 linker = "/usr/bin/gcc"
 rustflags = [
+    "-C", "link-arg=-B/usr/bin/",
     "-C", "link-arg=-Wl,-z,notext",
 ]
